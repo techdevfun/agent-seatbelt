@@ -44,6 +44,12 @@ jobs:
           path: |
             verification/results.md
             verification/results.json
+            verification/work/claude-code-clean/transcript.json
+            verification/work/claude-code-planted/transcript.json
+            verification/work/openshell-clean/transcript.json
+            verification/work/openshell-planted/transcript.json
+            verification/work/openshell-clean/reconciliation.json
+            verification/work/openshell-planted/reconciliation.json
           if-no-files-found: ignore
 
   scans:
