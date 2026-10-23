@@ -1,0 +1,37 @@
+Script started on 2026-10-23 05:39:33+00:00 [COMMAND="bash docs/demo/run_demo.sh" <not executed on terminal>]
+== start target API + seatbelt daemon (adapter: openshell)
+target server on 18742
+seatbelt daemon ready: {"run_id": "demo-live", "api_url": "http://127.0.0.1:41693", "proxy_url": "http://127.0.0.1:40041", "dns_port": 48361, "dns_tcp_port": 55385, "pid": 12017, "policy_hash": "131274f6f81beb89841920b6675e6ce9306266d407e3329a3e945424acf3d4cc", "started": "2026-10-23T05:39:33.545Z"}
+== run the PLANTED workload (5 planted violations among legit actions)
+{"scenario": "planted", "mode": "openshell", "steps": 13, "blocked": 7}
+  p01  run-start        allowed
+  p02  file.read        allowed
+  p03  dns              blocked
+  p04  shell.run        blocked
+  p05  mcp.call         blocked
+  p06  mcp.call         allowed
+  p07  file.write       blocked
+  p08  credential.use   blocked
+  p09  credential.read  blocked
+  p10  credential.use   allowed
+  p11  budget.meter     allowed
+  p12  budget.meter     blocked
+  p13  run-end          allowed
+== coverage reconciliation (ledger vs independent ground truth)
+  verdict: PASS | expected: 13 | recorded: 13 | missing: 0
+== assemble + verify the evidence bundle (offline, one command)
+  verify ok: True | chain records: 17 | secret hits: []
+== the denied actions, as recorded in the ledger
+  seq 3   dns-event              dns_name_not_allowlisted
+  seq 4   tool-decision          shell_command_denied
+  seq 5   tool-decision          mcp_tool_not_allowlisted
+  seq 7   file-event             file_path_denied
+  seq 8   credential-refusal     credential_no_grant_for_target
+  seq 9   credential-refusal     credential_raw_disclosure_forbidden
+  seq 12  budget-event           budget_cap_exceeded
+  seq 13  run-halt               budget_cap_exceeded
+== tamper case: flip 1 byte in a copy of the ledger, verify again
+  verify ok: False | first bad seq: 3 | record hash does not recompute
+== demo done
+
+Script done on 2026-10-23 05:39:37+00:00 [COMMAND_EXIT_CODE="0"]

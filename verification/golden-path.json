@@ -1,0 +1,56 @@
+{
+  "total_seconds": 1.7,
+  "budget_seconds": 1800,
+  "within_budget": true,
+  "verify_ok": true,
+  "steps": [
+    {
+      "step": "create demo directories",
+      "seconds": 0.0,
+      "exit": 0,
+      "tail": ""
+    },
+    {
+      "step": "start target API + seatbelt daemon",
+      "seconds": 2.0,
+      "exit": 0,
+      "tail": "state ready"
+    },
+    {
+      "step": "run clean sample workload",
+      "seconds": 0.45,
+      "exit": 0,
+      "tail": "{\"scenario\": \"clean\", \"mode\": \"openshell\", \"steps\": 11, \"blocked\": 0}"
+    },
+    {
+      "step": "stop daemon (checkpoint sealed)",
+      "seconds": 1.0,
+      "exit": 0,
+      "tail": ""
+    },
+    {
+      "step": "reconcile coverage",
+      "seconds": 0.07,
+      "exit": 0,
+      "tail": ":40:29.610Z\",\n  \"expected\": 11,\n  \"recorded\": 11,\n  \"missing\": [],\n  \"verdict\": \"PASS\",\n  \"coverage_record_seq\": 13,\n  \"head_hash\": \"0c20be6a9c980c6a68d1e7fd8fd8c5161276b60989f189478c8a9cb987b98210\"\n}"
+    },
+    {
+      "step": "assemble bundle",
+      "seconds": 0.01,
+      "exit": 0,
+      "tail": ""
+    },
+    {
+      "step": "write secrets file for the scan",
+      "seconds": 0.0,
+      "exit": 0,
+      "tail": ""
+    },
+    {
+      "step": "verify bundle (one command, offline)",
+      "seconds": 0.07,
+      "exit": 0,
+      "tail": "  \"checkpoints\": 2\n    },\n    \"secret_scan\": {\n      \"ok\": true,\n      \"hits\": []\n    },\n    \"coverage\": {\n      \"ok\": true,\n      \"expected\": 11,\n      \"recorded\": 11,\n      \"missing\": []\n    }\n  }\n}"
+    }
+  ]
+}

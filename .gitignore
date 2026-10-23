@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+verification/work/
+*.key
+operator-key.txt
+secrets.txt
+.DS_Store
