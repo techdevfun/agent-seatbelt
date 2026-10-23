@@ -1,6 +1,6 @@
 # RELEASE DOSSIER — agent-seatbelt, phase 1 (local)
 
-Status: **phase-1 build complete locally; NOT published.** No GitHub repository has been created — repository creation and any release action are a separate owner order at the live-measurement milestone, per the phase-1 plan. This dossier records what was built, what was measured, what is still pending, and the self-score against the factory's feasible gate.
+Status: **phase-1 build complete; repository created PRIVATE for the live-measurement milestone (2026-10-23); NOT published.** No public flip, landing, dev.to article, or release exists — those remain a separate owner order after the feasible gate is met. This dossier records what was built, what was measured, what is still pending, and the self-score against the factory's feasible gate. The live-measurement milestone is recorded in §7.
 
 ## 1. What was built (M1–M5)
 
@@ -32,10 +32,10 @@ Source: `verification/results.json` / `results.md` (final run 2026-10-23, wall 2
 | Item | Status |
 |---|---|
 | OPA decisions, daemon, MCP proxy, hook CLI (real subprocess, real hook protocol), egress proxy, DNS tap decision path, broker, ledger, accountant, verifier | **Live-measured** end to end in this VM |
-| DNS tap UDP transport | Implemented; loopback UDP is blocked by this VM's sandbox (bare-socket `PermissionError` reproduced), so acceptance exercised the identical decision path over the tap's TCP transport. UDP live re-measurement pending an unrestricted host |
-| OpenShell native OCSF stream | **Reconstructed, not captured** — no OpenShell in the build environment; sample built from the vendor's documented schema + the Sorami evaluation's measured event inventory, gaps included, and labeled as reconstructed everywhere it is used |
-| Interactive Claude Code session | **Pending** — the adapter is exercised through the real hook executable and protocol; no live session was run |
-| GitHub CI, public repo display, dev.to, landing | **Not started** — repository creation is a separate owner order |
+| DNS tap UDP transport | **Live-measured on an unrestricted host (2026-10-23)** — this VM's sandbox blocks loopback UDP (bare-socket `PermissionError` reproduced, including inside a fresh user network namespace), so local acceptance exercised the identical decision path over the tap's TCP transport (all four local transcripts record `via tcp`). On GitHub-hosted CI runners the identical harness recorded `via udp` in all four run transcripts and passed every check (§7) |
+| OpenShell native OCSF stream | **Reconstructed, not captured** — the milestone attempt went much further than "not installed" (§7): the official OpenShell 0.1.5 package installs and its gateway runs in this VM under the vm compute driver, but a sandbox never booted — image preparation stalled with zero bytes staged for ~13 minutes and the sandbox ended in Error, so no real workload ran and no real OCSF stream exists yet. Pending a host where an OpenShell sandbox actually boots |
+| Interactive Claude Code session | **Pending** — verified at the milestone: no Claude Code CLI and no Anthropic credential exist in this VM, so no live session can be run here; a live session needs the owner's Anthropic auth on a machine with the CLI. The adapter is exercised through the real hook executable and protocol, locally and in CI |
+| GitHub CI, public repo display, dev.to, landing | **CI live** — repository created private 2026-10-23; the CI workflow (unit tests + acceptance harness + public-content sweep + gitleaks; tools pinned and sha256-verified) is green on 4 consecutive runs (§7). Public display, dev.to, landing: **not started** — separate owner release order |
 
 ## 4. Blueprint risk register outcomes
 
@@ -53,19 +53,42 @@ Quality boards (feasible gate: quality ≥ 95/100 **and** floors HM1 ≥ 18/20, 
 |---|---|---|
 | HM1 Pain & differentiation | **18/20** | Sourced, measured pain (independent evaluation's evidence gaps); wedge = verified coverage on a neutral cross-runtime layer. −2: no external user validation yet (the standing factory deduction) |
 | HM2 Runs for real & e2e | **18/20** | Every phase-1 acceptance criterion measured on real processes, both adapters × both scenarios. −2: live OpenShell capture and a live Claude Code session still pending (§3) |
-| HM3 Code & test quality | **13.5/15** | Stdlib-only, single-writer design, 20 unit/component tests incl. real-OPA decisions, acceptance harness as regression. −1.5: no CI run yet (no repo), no coverage-% metric, daemon concurrency lightly tested |
+| HM3 Code & test quality | **14.5/15** | Stdlib-only, single-writer design, 20 unit/component tests incl. real-OPA decisions, acceptance harness as regression — now running in GitHub CI on every push: 4 consecutive green runs at the live-measurement milestone (§7), with OPA/gitleaks downloads pinned and sha256-verified and the Standing Rule 7 sweep enforced as a CI job. −0.5: no coverage-% metric yet; daemon concurrency still only lightly tested |
 | HM4 Demo + README | **14/15** | Clean English hero, who-hurts, raw real-run capture, honest comparison, machine-verified quickstart; language/internal-name sweep passes. −1: demo is a raw text capture, no rendered GIF/video asset yet |
 | HM7 Safety & compliance | **5/5** | gitleaks clean; Apache-2.0 LICENSE; no secrets (fake canaries labeled); risk sweep done; claims discipline documented |
-| **QUALITY total** | **68.5/75 = 91.3/100** | All five per-board floors met; the ≥95 gate itself **not yet met** |
+| **QUALITY total** | **69.5/75 = 92.7/100** | All five per-board floors met; the ≥95 gate itself **not yet met** (re-scored after the live-measurement milestone, §7) |
 
 Distribution boards (tracked separately; completed *by* release actions): HM5 0/15, HM6 0/10 — no repository, landing, or article exists yet, by the owner's sequencing.
 
 The 5 hard conditions all pass: working end-to-end code with a green e2e; no secrets; no copyright violations (all code original to this project); LICENSE present (Apache-2.0); no fake engagement of any kind.
 
-**Gate conclusion, stated plainly:** phase 1's build scope is complete and every acceptance criterion in the plan is measured PASS, but the feasible gate's quality bar (≥95/100) is **not** met at this local ceiling — 91.3/100 with all floors green. The remaining 3.7 points are itemized and locked behind owner-ordered stages, not behind more local code: live-environment measurement (HM2 +2: real OpenShell capture + live Claude Code session), external user validation (HM1 +2), a rendered demo asset (HM4 +1), and CI on the created repository (HM3). **Do not publish from this dossier.** The next step is the owner's live-measurement milestone decision — the same pattern flagship #2 followed from its local ceiling to its release.
+**Gate conclusion, stated plainly:** phase 1's build scope is complete, every acceptance criterion in the plan is measured PASS, and the live-measurement milestone (§7) closed the CI item (HM3) and the DNS/UDP item — but the feasible gate's quality bar (≥95/100) is **not** met: **92.7/100** with all floors green. The remaining 2.3 points are itemized and locked, not behind more local code: HM2 +2 (a real OpenShell sandbox capture — the gateway runs in this VM but a sandbox has never booted here — and a live Claude Code session, which needs the owner's Anthropic auth), HM1 +2 (external user validation), HM4 +1 (a rendered GIF/video demo asset in place of the raw text capture — producible locally, not yet done). **Do not publish from this dossier.**
 
 ## 6. Waiting on the owner
 
-1. Order to create the GitHub repository `agent-seatbelt` (private-first for live measurement, per the flagship #2 precedent) — or keep the tree local.
-2. Live-measurement milestone: a host with a real OpenShell (Linux driver) and an interactive Claude Code session, plus a loopback-UDP-unrestricted environment for the tap's UDP path.
-3. After live measurement closes the HM2 gap and the gate is re-scored ≥95 with floors green: the release package (public flip, techdev.fun landing card, dev.to article with the honest comparison) as a separate approval.
+1. A live-measurement host where an OpenShell sandbox actually boots (working Docker/Podman, or the vm driver with reliable registry egress for image preparation — this VM has neither Docker nor KVM, and its image fetch stalled, §7), plus the owner's Anthropic auth on a machine with the Claude Code CLI for a live session.
+2. After live measurement closes the HM2 gap and the gate is re-scored ≥95 with floors green: the release package (public flip, techdev.fun landing card, dev.to article with the honest comparison) as a separate approval.
+3. Note: while the repository is private, the factory's R2 backup mechanism (which mirrors public repositories only) does not cover it; coverage starts automatically when the repository becomes public.
+
+## 7. Live-measurement milestone — 2026-10-23
+
+Ordered by the owner 2026-10-23 (create the repository private + run the live-measurement milestone). Executed the same day; every claim below was verified against the live GitHub API or a local process, not taken from a plan.
+
+**Push (Standing Rule 7 gate first).** The exact push set was swept before any upload: two independent sweeps (a broad diacritic/internal-name scan and the checked-in `scripts/check_public_content.py`) reported 0 Vietnamese-diacritic lines and 0 internal-name hits, and gitleaks reported no leaks. 44 files / 0.21 MB were pushed via the Git Data API (blobs → tree → commit → ref); excluded per the brief and `.gitignore`: `verification/work/**` (raw bundles/probes/tamper artefacts), `__pycache__`, `*.pyc`. Remote verification: the recursive tree of `main` holds exactly 44 blobs, every blob SHA identical to the local staging tree (tree SHA `de6fb89b7e5c4024fd8bffe8cc1182d98a21de66` on both sides), 0 missing, 0 extra. History: `6d620ad1` README seed (the Git Data API refuses an empty repository, so the first commit was seeded via the Contents API) → full-tree commits `b2071894` / `f2825cc7` → `ad0727aa` (CI artifact paths); this dossier update follows as the next commit. Repository topics and description were set; the repository remains **private**. One portability fix rode along: the OPA binary path in `tests/` and `verification/` now honors `SEATBELT_OPA_BIN` (default unchanged), which is how CI points at its pinned OPA.
+
+**CI.** `.github/workflows/ci.yml` runs two jobs on every push: unit tests + the full acceptance harness (with OPA v1.21.3 downloaded and sha256-verified), and the release scans (Standing Rule 7 sweep + gitleaks v8.30.1, pinned and sha256-verified). Four consecutive green runs:
+
+| Run | Event | HEAD | Duration | Conclusion |
+|---|---|---|---|---|
+| 39912885037 | push | b2071894 | 24 s | success |
+| 39913097267 | push | f2825cc7 | 24 s | success |
+| 39913362467 | push | ad0727aa | 23 s | success |
+| 39913941865 | workflow_dispatch | ad0727aa | 29 s | success |
+
+The CI-generated acceptance results (run 39913362467 artifact) report ALL CHECKS PASS with a probe median p95 of 1.841 ms on the runner.
+
+**DNS tap UDP — measured.** All four CI run transcripts record `via udp`: on the unrestricted GitHub-hosted runner the agent's DNS queries went over the tap's UDP transport and every acceptance check passed (locally the same transcripts record `via tcp`, the documented fallback, because this VM's sandbox blocks loopback UDP — verified by bare-socket test, including inside a fresh user network namespace). The UDP path is therefore live-measured, on CI.
+
+**OpenShell — attempted in depth, sandbox never booted.** The official installer (`install.sh` from NVIDIA/OpenShell) installed the official `openshell 0.1.5-1` Debian package in this VM. Verified step by step: the CLI runs (`openshell 0.1.5`); there is no systemd user bus, so the gateway was started manually per its unit file (preflight, cert generation, direct binary); auto-detection fails with the gateway's own error "no compute driver configured and auto-detection found no suitable installed driver"; the docker driver fails with "Socket not found: /var/run/docker.sock" (no Docker/Podman exists in this VM) and the podman driver finds no Podman socket; the **vm driver starts the gateway**, which was registered over mTLS and set active. `openshell sandbox create --name demo` was accepted and the sandbox sat in `Provisioning` for ~13 minutes inside the driver's image-preparation step for `nvcr.io/nvidia/base/ubuntu:24.04` — the registry itself answers (401 auth challenge in ~0.6 s), but the prepare-image worker staged zero bytes and logged no progress, the CLI outlived its 240 s timeout, and after the stuck worker was terminated the sandbox landed in `Error` and was deleted. (This VM's egress is known-unreliable for large downloads; the driver logged nothing during the fetch, so the byte-level cause inside the driver was not verified — stated as such.) Conclusion: gateway + CLI are live here; **no OpenShell sandbox has ever booted in this environment, so the native OCSF stream remains reconstructed, pending a suitable host** — exactly the HM2 lock recorded in §5.
+
+**Claude Code — not runnable here.** Verified: no `claude` CLI is installed in this VM and no Anthropic credential is present (no API key in the environment, no `~/.claude` credentials). Installing the CLI without the owner's auth cannot produce a live session, and credentials are never requested in chat under factory rules. Status stays **pending**; the adapter's real hook-protocol path is covered locally and in CI.
