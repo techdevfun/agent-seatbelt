@@ -2,6 +2,15 @@
 
 All notable changes to Agent Seatbelt are recorded here. The policy pack is versioned separately (see `POLICY_PACK_VERSION` in `src/seatbelt/__init__.py`); pack changes are called out explicitly.
 
+## [Unreleased] — OpenShell live round + first public release, 2026-10-23
+
+### Measured
+- OpenShell live round on GitHub Actions (`.github/workflows/openshell-live.yml`): OpenShell 0.1.5-1 booted under the docker driver (sandbox Ready, real commands executed); a native shorthand DNS-denial event was captured (`NET:REFUSE … DENIED`, reason `policy_dns_ineligible`); Seatbelt-side coverage passed 13/13 against independent ground truth.
+- The runtime's documented OCSF-JSON export produced **zero records in both live runs** with `ocsf_json_enabled` set per the vendor docs — native-side ingest still consumes the reconstructed phase-1 stream, now because the real export is measurably empty, not because no runtime was available. The original UDP exfiltration case could not be re-run there (the default sandbox image ships no `dig`/`curl`/`python3`).
+
+### Released
+- First public release of this repository. Gate record in the release dossier (§9–§10): quality 72/75 = 96.0/100 under the factory's feasible gate, met on measured evidence.
+
 ## [Unreleased] — local polish round, 2026-10-23
 
 ### Added

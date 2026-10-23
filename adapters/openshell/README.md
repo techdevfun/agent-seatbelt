@@ -12,7 +12,7 @@ Plus the shared boundary points: MCP calls through the proxy interceptor, tool/f
 
 ## What the reconciliation shows (phase-1 measurement)
 
-On the reconstructed streams (see Status), the clean run reconciles completely: both network events appear in both sources. The planted run's reconciliation reports `native_missing` = exactly one event — the blocked DNS exfiltration query, present at Seatbelt's boundary (record seq 3) and absent natively — reproducing, mechanically, the central finding of the independent OpenShell evaluation: *blocked UDP DNS left no event*. `boundary_missing` is empty in both runs.
+On the phase-1 reconciliation streams (a faithful reconstruction — see Status), the clean run reconciles completely: both network events appear in both sources. The planted run's reconciliation reports `native_missing` = exactly one event — the blocked DNS exfiltration query, present at Seatbelt's boundary (record seq 3) and absent natively — reproducing, mechanically, the central finding of the independent OpenShell evaluation: *blocked UDP DNS left no event*. `boundary_missing` is empty in both runs.
 
 ## Guarantees and limits
 
@@ -20,4 +20,11 @@ Guaranteed (measured): boundary coverage reconciles to **0 missing records** aga
 
 ## Status — read this before quoting any number
 
-No OpenShell runtime is installed in the build environment. The OCSF stream used for ingest + reconciliation is a **faithful reconstruction** (`make_ocsf_sample.py`) from the vendor's documented OCSF observability schema and the event inventory in Sorami's independent evaluation of OpenShell v0.1.2 — including its measured gaps (no event for blocked UDP DNS; no native tool-call events). It is **not** a live capture. What is live-measured: the Seatbelt side end to end (proxy, tap, ingest, reconciliation, ledger, verifier). What is pending: running the adapter beside a real OpenShell, including the Linux-driver coverage re-measurement the blueprint schedules — the dossier records this as an open item, and no acceptance claim in this repository rests on the native side being live.
+A live OpenShell has now been run. On a GitHub Actions runner, OpenShell 0.1.5-1 booted under its docker driver (sandbox Ready, real commands executed), driven by `.github/workflows/openshell-live.yml`; the run evidence is archived as a CI artifact and recorded in the release dossier. Measured on the real runtime:
+
+- A native shorthand event for a denied DNS lookup exists (`NET:REFUSE … DENIED`, reason `policy_dns_ineligible`) — the supervisor does see the denial and logs it in shorthand form.
+- The documented **OCSF-JSON export produced zero records in both live runs**, with `ocsf_json_enabled` set exactly per the vendor's documentation. Per those same docs, the supervisor's file sink lives on a tmpfs that external tooling cannot read, so the export could not be inspected out of band either. Native-side ingest therefore still has no real stream to consume, and two-source reconciliation against the native JSON degenerates to the boundary side alone — now a *measured* property of the vendor's current build, not an artifact of our test environment.
+- Seatbelt-side coverage on the runner reconciled **13/13** against independent ground truth.
+- The original independent-evaluation case (blocked UDP DNS exfiltration) could not be re-run on the runner: the default sandbox image ships no `dig`, `curl`, or `python3`.
+
+The OCSF stream used for the local ingest + reconciliation acceptance remains a **faithful reconstruction** (`make_ocsf_sample.py`) from the vendor's documented OCSF observability schema and the event inventory in Sorami's independent evaluation of OpenShell v0.1.2 — because the real runtime exported nothing to capture. What is live-measured: the Seatbelt side end to end (proxy, tap, ingest, reconciliation, ledger, verifier), plus the live facts above. No acceptance claim in this repository rests on the native JSON stream being available.

@@ -11,7 +11,7 @@ Performed locally before the phase-1 dossier (STANDING RULE 5). No GitHub reposi
 
 ## Claim discipline
 - No performance or coverage claim appears in public docs without a measurement behind it in `verification/results.md` or an adapter README.
-- The OpenShell adapter's native side is labeled **reconstructed, not captured** in the adapter README, the sample generator's docstring, the CHANGELOG, and the dossier. The pending live items are listed in the dossier §5.
+- The OpenShell adapter's native side was labeled **reconstructed, not captured** in the adapter README, the sample generator's docstring, the CHANGELOG, and the dossier. After the 2026-10-23 live round (dossier §9) the labels were updated to the measured state: live boot under the docker driver and a native shorthand denial event verified; the documented OCSF-JSON export measured empty (0 records in both runs), so the local ingest stream remains the reconstruction — for a measured reason. The one remaining pending live item (an interactive Claude Code session) is recorded in the dossier.
 - Competitor statements in the README comparison trace to the blueprint's sourced scan (vendor docs + the Sorami independent evaluation); "where rivals beat us" is stated in the README itself.
 - Compliance-framework mentions are labeled "reference only, not a certification" in `policies/README.md`.
 
@@ -25,3 +25,7 @@ Performed locally before the phase-1 dossier (STANDING RULE 5). No GitHub reposi
 ## Residual risks accepted for phase 1 (documented, not hidden)
 - Loopback UDP is blocked in the build VM: the DNS tap's UDP transport is implemented and message-level tested, but the live acceptance exercised the identical decision path over DNS-over-TCP. Re-measure on an unrestricted host before release claims about the UDP path.
 - Checkpoint signing is HMAC with a local operator key (documented limit; KMS/HSM is phase 3).
+
+## Re-run at release (2026-10-23)
+
+The Standing Rule 7 sweep was re-run against the final tree before the public flip: 0 Vietnamese-diacritic lines and 0 internal-name hits (word-boundary scan) across all public text files; the release scans job (sweep + gitleaks) runs in CI on the release commit. The live-round facts were folded into the README, the OpenShell adapter README, the coverage manifest, the CHANGELOG, and the dossier before the flip — no public text still describes the native side as merely "pending a host".

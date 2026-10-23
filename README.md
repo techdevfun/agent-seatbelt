@@ -73,7 +73,7 @@ The verifier prints `{"ok": true, ...}` and exits 0. Try the `planted` scenario 
 | Claude Code | PreToolUse hook CLI (`seatbelt hook`) + resolver tap + broker/budget via daemon | OpenTelemetry events, ingested into the same ledger | [adapters/claude-code/coverage-manifest.json](adapters/claude-code/coverage-manifest.json) |
 | NVIDIA OpenShell | Daemon decision API + MCP proxy + egress proxy + resolver tap | OCSF export, ingested and reconciled against Seatbelt's own records | [adapters/openshell/coverage-manifest.json](adapters/openshell/coverage-manifest.json) |
 
-Status honesty: the hook CLI, MCP proxy, egress proxy, DNS tap, broker, ledger, accountant, and verifier are measured end to end by `verification/run_acceptance.py` (all checks pass; see `verification/results.md`). The OpenShell adapter's ingest + two-source reconciliation is measured against a faithfully reconstructed OCSF stream built from the vendor's documented schema and a published independent evaluation's event inventory — **a live capture against a running OpenShell on Linux is still pending** and is tracked as such in the release dossier. The Claude Code hook path is exercised through the real hook protocol (JSON on stdin, decision JSON on stdout) via subprocess; a live interactive Claude Code session is likewise pending.
+Status honesty: the hook CLI, MCP proxy, egress proxy, DNS tap, broker, ledger, accountant, and verifier are measured end to end by `verification/run_acceptance.py` (all checks pass; see `verification/results.md`). The OpenShell adapter has also run beside a **live OpenShell 0.1.5**: on a GitHub Actions runner (docker driver) the sandbox booted and executed real commands, a native shorthand event for a DNS denial was captured (`NET:REFUSE … DENIED`, reason `policy_dns_ineligible`), and Seatbelt-side coverage passed 13/13 against independent ground truth (workflow `.github/workflows/openshell-live.yml`; full record in the release dossier). One measured hole remains, and it is the runtime's, not a reconstruction gap: with `ocsf_json_enabled` set exactly as the vendor documents, the runtime's **OCSF-JSON export produced zero records in both live runs**, so the native JSON stream still has nothing to ingest — and the documented supervisor file sink sits on a tmpfs that the vendor's own docs say external tools cannot read. Closing that hole is the boundary recorder's reason to exist. The Claude Code hook path is exercised through the real hook protocol (JSON on stdin, decision JSON on stdout) via subprocess; a live interactive Claude Code session is still pending the owner's Anthropic authentication.
 
 ## How it compares — honestly
 
@@ -81,7 +81,7 @@ Status honesty: the hook CLI, MCP proxy, egress proxy, DNS tap, broker, ledger, 
 |---|---|---|---|---|
 | What it is | Policy + evidence layer above runtimes | Sandbox runtime | Sandbox with tamper-evident audit | Credential broker (commercial, Preview) |
 | Runtime-neutral | **Yes** — one ledger across runtimes | No — its own sandbox | No — its own sandbox | Partial — HTTP(S) proxy only |
-| Records denied actions | **Yes, by contract, with coverage checks** | Measured gaps (blocked DNS: no event) | Yes, inside its sandbox | Audit log for brokered calls |
+| Records denied actions | **Yes, by contract, with coverage checks** | Shorthand event exists natively, but the documented OCSF-JSON export measured **0 records** on 0.1.5 — nothing reaches an outside ledger | Yes, inside its sandbox | Audit log for brokered calls |
 | Coverage is verified | **Yes** — expected ↔ observed reconciliation, run fails on a gap | No equivalent published | No equivalent published | No |
 | Credential grants | Per run + per action, in the same ledger | Injected at egress inside its sandbox | n/a | Per service bundle |
 | Isolation / sandboxing | **None — by design** | **Yes, strong, independently evaluated** | Yes | No |
@@ -111,7 +111,7 @@ tests/            unit + component + concurrency tests (23 tests)
 
 ## Roadmap
 
-Phase 2: an E2B adapter; sealing exports from observability tools into verifiable evidence; broker coverage for database/SSH patterns; a coverage re-measurement of OpenShell on its Linux drivers, published; richer alerting. Phase 3: more runtimes, public transparency anchoring, CI mode as an agent-testing gate.
+Phase 2: an E2B adapter; sealing exports from observability tools into verifiable evidence; broker coverage for database/SSH patterns; a coverage re-measurement of OpenShell on its remaining Linux drivers (the docker driver was measured live in phase 1), published; richer alerting. Phase 3: more runtimes, public transparency anchoring, CI mode as an agent-testing gate.
 
 ## License
 
