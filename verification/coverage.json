@@ -1,0 +1,68 @@
+{
+  "modules": {
+    "__init__.py": {
+      "coverage_pct": 75.0,
+      "covered_lines": 3,
+      "executable_lines": 4
+    },
+    "cli.py": {
+      "coverage_pct": 0.0,
+      "covered_lines": 0,
+      "executable_lines": 126
+    },
+    "client.py": {
+      "coverage_pct": 39.2,
+      "covered_lines": 20,
+      "executable_lines": 51
+    },
+    "coverage.py": {
+      "coverage_pct": 49.4,
+      "covered_lines": 38,
+      "executable_lines": 77
+    },
+    "hook.py": {
+      "coverage_pct": 55.2,
+      "covered_lines": 32,
+      "executable_lines": 58
+    },
+    "ingest.py": {
+      "coverage_pct": 55.7,
+      "covered_lines": 34,
+      "executable_lines": 61
+    },
+    "ledger.py": {
+      "coverage_pct": 94.9,
+      "covered_lines": 131,
+      "executable_lines": 138
+    },
+    "mcp_proxy.py": {
+      "coverage_pct": 0.0,
+      "covered_lines": 0,
+      "executable_lines": 69
+    },
+    "pdp.py": {
+      "coverage_pct": 81.0,
+      "covered_lines": 34,
+      "executable_lines": 42
+    },
+    "serve.py": {
+      "coverage_pct": 14.7,
+      "covered_lines": 64,
+      "executable_lines": 434
+    },
+    "verify.py": {
+      "coverage_pct": 77.9,
+      "covered_lines": 74,
+      "executable_lines": 95
+    }
+  },
+  "scope": "src/seatbelt/*.py",
+  "tests_passed": true,
+  "tests_run": 23,
+  "tool": "scripts/run_tests_with_coverage.py (stdlib sys.monitoring)",
+  "total": {
+    "coverage_pct": 37.2,
+    "covered_lines": 430,
+    "executable_lines": 1155
+  }
+}

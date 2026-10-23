@@ -28,10 +28,10 @@ jobs:
           echo "add7c9dcf56e1ce1538426a6ee595ea1cc7ee830bbedd4c23219825b02b19a79  /tmp/opa" | sha256sum -c -
           chmod +x /tmp/opa
           /tmp/opa version
-      - name: Unit tests
+      - name: Unit tests + line coverage (published)
         env:
           SEATBELT_OPA_BIN: /tmp/opa
-        run: python3 -m unittest discover -s tests -v
+        run: python3 scripts/run_tests_with_coverage.py
       - name: Acceptance harness (both adapters, clean + planted)
         env:
           SEATBELT_OPA_BIN: /tmp/opa
@@ -44,6 +44,7 @@ jobs:
           path: |
             verification/results.md
             verification/results.json
+            verification/coverage.json
             verification/work/claude-code-clean/transcript.json
             verification/work/claude-code-planted/transcript.json
             verification/work/openshell-clean/transcript.json

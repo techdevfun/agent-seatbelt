@@ -2,6 +2,13 @@
 
 All notable changes to Agent Seatbelt are recorded here. The policy pack is versioned separately (see `POLICY_PACK_VERSION` in `src/seatbelt/__init__.py`); pack changes are called out explicitly.
 
+## [Unreleased] — local polish round, 2026-10-23
+
+### Added
+- Rendered demo GIF (`docs/demo/demo.gif`), recorded from a real interactive terminal session running the extended `docs/demo/run_demo.sh` — now a clean run followed by the planted run, coverage reconciliation, offline bundle verification, and the 1-byte tamper case. The raw session text remains in `docs/demo/typescript.txt`.
+- Test line-coverage reporting: `scripts/run_tests_with_coverage.py` (standard-library `sys.monitoring` only) runs the unit suite and publishes the unit-test line coverage of `src/seatbelt` — 37.2% at this writing, per-module numbers in `verification/coverage.json` — and is wired into CI as the unit-test step. The daemon/CLI/proxy modules sit near 0% at the unit layer by design: they are exercised end to end by the acceptance harness instead.
+- Concurrency tests (3): parallel ledger appends from 8 threads and checkpoints racing appends both keep the hash chain verifiably intact; 48 parallel PDP decisions against a real OPA server match the expected outcomes.
+
 ## [0.1.0] — 2026-10-23 — Phase 1
 
 Initial phase-1 build (local; not yet published — repository creation and release are a separate maintainer decision).

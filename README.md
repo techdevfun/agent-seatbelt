@@ -4,7 +4,9 @@ A vendor-neutral policy and tamper-evident evidence layer that sits **above** th
 
 **An agent action with no evidence record is a system failure, not a detail.** Seatbelt turns evidence coverage into a measured, self-checking property: the ledger reconciles what was expected against what was observed, and a run fails publicly when a record is missing.
 
-<!-- demo: docs/demo/typescript.txt is a raw terminal capture of a real planted-violation run -->
+![Demo: one real terminal session — a clean run, a planted run with its violations blocked and recorded, offline bundle verification, and the 1-byte tamper case failing verification](docs/demo/demo.gif)
+
+*The demo is one real terminal session, recorded as it ran — nothing staged, nothing retyped. `bash docs/demo/run_demo.sh` runs the clean workload (every action allowed and recorded), then the planted workload (five planted violations blocked **and** recorded), reconciles coverage, verifies the evidence bundle offline, then flips one byte in a copy of the ledger and watches the verifier fail, naming the tampered record. Raw session text: [docs/demo/typescript.txt](docs/demo/typescript.txt).*
 
 ## Who hurts, and what this does about it
 
@@ -94,8 +96,8 @@ policies/         the Rego policy pack v1 + data (see policies/README.md)
 adapters/         claude-code/ and openshell/ adapters + manifests
 examples/         the ops-assistant sample workload (clean + planted)
 verification/     the phase-1 acceptance harness and its measured results
-docs/             architecture, threat model, raw demo capture
-tests/            unit + component tests (20 tests)
+docs/             architecture, threat model, demo GIF + raw capture
+tests/            unit + component + concurrency tests (23 tests)
 ```
 
 ## Documentation

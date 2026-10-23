@@ -9,7 +9,9 @@ import json
 import os
 import sys
 import tempfile
+import threading
 import unittest
+from concurrent.futures import ThreadPoolExecutor
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
 
@@ -229,6 +231,117 @@ class PDPTests(unittest.TestCase):
     def test_unknown_class_defaults_to_deny(self):
         out = self.decide({"class": "teleport"})
         self.assertEqual(out["decision"], "deny")
+
+
+class ConcurrencyTests(unittest.TestCase):
+    """Light concurrency: the ledger is single-writer by design, with
+    every append serialized through one lock inside the daemon. These
+    tests prove that parallel callers (worker threads appending,
+    checkpoints racing appends, parallel PDP decisions against the
+    real OPA server) can neither corrupt the hash chain nor change a
+    decision."""
+
+    def test_parallel_appends_keep_chain_intact(self):
+        threads, per_thread = 8, 25
+        with tempfile.TemporaryDirectory() as tmp:
+            key = load_signing_key(os.path.join(tmp, "key.txt"))
+            ledger = Ledger(os.path.join(tmp, "ledger.ndjson"),
+                            os.path.join(tmp, "anchors.ndjson"),
+                            key, "run-conc", "ops-assistant", "test")
+
+            def worker(tid):
+                for i in range(per_thread):
+                    ledger.append(
+                        "tool-decision", "tool",
+                        {"tool": "shell.run", "command": "ls"},
+                        decision="allow", reason="tool_allowlisted",
+                        action_id="t%d-%d" % (tid, i))
+
+            with ThreadPoolExecutor(max_workers=threads) as pool:
+                list(pool.map(worker, range(threads)))
+            ledger.checkpoint()
+            ledger.close()
+            records = read_records(os.path.join(tmp, "ledger.ndjson"))
+            total = threads * per_thread + 1  # + the checkpoint record
+            self.assertEqual([r["seq"] for r in records],
+                             list(range(1, total + 1)))
+            self.assertEqual(
+                len({r["action_id"] for r in records
+                     if r["action_id"]}), threads * per_thread)
+            result = verify_bundle(tmp, key, [])
+            self.assertTrue(result["ok"], result)
+
+    def test_checkpoints_racing_appends_stay_valid(self):
+        writers, per_writer = 4, 20
+        with tempfile.TemporaryDirectory() as tmp:
+            key = load_signing_key(os.path.join(tmp, "key.txt"))
+            ledger = Ledger(os.path.join(tmp, "ledger.ndjson"),
+                            os.path.join(tmp, "anchors.ndjson"),
+                            key, "run-race", "ops-assistant", "test")
+            stop = threading.Event()
+
+            def writer(tid):
+                for i in range(per_writer):
+                    ledger.append(
+                        "tool-decision", "tool",
+                        {"tool": "shell.run", "command": "true"},
+                        decision="allow", reason="tool_allowlisted",
+                        action_id="w%d-%d" % (tid, i))
+
+            def sealer():
+                while not stop.is_set():
+                    ledger.checkpoint()
+
+            seal_thread = threading.Thread(target=sealer)
+            seal_thread.start()
+            with ThreadPoolExecutor(max_workers=writers) as pool:
+                list(pool.map(writer, range(writers)))
+            stop.set()
+            seal_thread.join()
+            ledger.checkpoint()
+            ledger.close()
+            records = read_records(os.path.join(tmp, "ledger.ndjson"))
+            self.assertEqual([r["seq"] for r in records],
+                             list(range(1, len(records) + 1)))
+            self.assertGreater(
+                len([r for r in records if r["kind"] == "checkpoint"]), 1)
+            result = verify_bundle(tmp, key, [])
+            self.assertTrue(result["ok"], result)
+
+    def test_parallel_decisions_match_expected(self):
+        proc, url = start_opa(OPA, os.path.join(ROOT, "policies"), 18311)
+        try:
+            pdp = PDP(url, os.path.join(ROOT, "policies"), "1.0.0")
+            budget = {"class": "budget", "cap_cost": 0.5,
+                      "cap_tokens": 100, "used_cost": 0.4,
+                      "used_tokens": 0, "add_tokens": 1}
+            cases = [
+                ({"class": "tool", "tool": "shell.run", "command": "ls"},
+                 ("allow", None)),
+                ({"class": "tool", "tool": "shell.run",
+                  "command": "cat ~/.ssh/id_rsa"},
+                 (None, "shell_command_denied")),
+                ({"class": "tool", "tool": "shell.deploy"},
+                 ("require-approval", None)),
+                ({**budget, "add_cost": 0.1}, ("allow", None)),
+                ({**budget, "add_cost": 0.11},
+                 (None, "budget_cap_exceeded")),
+                ({"class": "teleport"}, ("deny", None)),
+            ]
+            jobs = [cases[i % len(cases)] for i in range(48)]
+
+            def run(job):
+                action, (want_decision, want_reason) = job
+                out = pdp.decide(action)
+                if want_decision is not None:
+                    self.assertEqual(out["decision"], want_decision)
+                if want_reason is not None:
+                    self.assertEqual(out["reason"], want_reason)
+
+            with ThreadPoolExecutor(max_workers=8) as pool:
+                list(pool.map(run, jobs))
+        finally:
+            proc.terminate()
 
 
 if __name__ == "__main__":

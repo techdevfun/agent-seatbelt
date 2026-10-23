@@ -1,6 +1,6 @@
 # Phase-1 acceptance results
 
-Generated: 2026-10-23T05:40:27Z · wall time: 26.5s · **ALL CHECKS PASS: True**
+Generated: 2026-10-23T07:54:57Z · wall time: 30.1s · **ALL CHECKS PASS: True**
 
 ## claude-code-clean (19 ledger records)
 - [PASS] agent_run_completes — {"scenario": "clean", "mode": "claude-code", "steps": 11, "blocked": 0}
@@ -39,11 +39,11 @@ Generated: 2026-10-23T05:40:27Z · wall time: 26.5s · **ALL CHECKS PASS: True**
 - [PASS] offline_verifier_passes_bundle — {"chain": {"ok": true, "records": 20}, "checkpoints": {"ok": true, "checkpoints": 3}, "secret_scan": {"ok": true, "hits": []}, "coverage": {"ok": true, "expected": 13, "recorded": 13, "missing": []}}
 
 ## Decision latency (daemon-side, PDP + ledger append)
-- Across runs: n=28, p50=15.456 ms, p95=28.147 ms, max=34.405 ms
-- Probe round 0: n=200, p50=15.627 ms, p95=31.222 ms, max=53.676 ms
-- Probe round 1: n=200, p50=15.139 ms, p95=27.453 ms, max=62.507 ms
-- Probe round 2: n=200, p50=15.121 ms, p95=26.201 ms, max=82.45 ms
-- Probe median p95: **27.453 ms** (criterion: <= 50 ms)
+- Across runs: n=28, p50=16.051 ms, p95=29.82 ms, max=54.512 ms
+- Probe round 0: n=200, p50=26.556 ms, p95=39.398 ms, max=65.266 ms
+- Probe round 1: n=200, p50=18.199 ms, p95=32.076 ms, max=66.013 ms
+- Probe round 2: n=200, p50=15.23 ms, p95=42.034 ms, max=102.793 ms
+- Probe median p95: **39.398 ms** (criterion: <= 50 ms)
 
 ## Tamper case (V6)
 - 1 byte flipped in record seq 3; verifier first bad seq: 3 (record hash does not recompute)
