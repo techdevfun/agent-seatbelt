@@ -2,6 +2,11 @@
 
 All notable changes to Agent Seatbelt are recorded here. The policy pack is versioned separately (see `POLICY_PACK_VERSION` in `src/seatbelt/__init__.py`); pack changes are called out explicitly.
 
+## [Unreleased] — 2026-11-01
+
+### Changed
+- CI + live OpenShell workflow: bump the pinned, sha256-verified OPA binary v1.21.3 → v1.21.4 (same 1.21 line, patch release). Unit suite (23 tests) and the full acceptance harness re-run locally against 1.21.4 — all acceptance checks pass, published line coverage unchanged at 37.2%.
+
 ## [Unreleased] — OpenShell live round + first public release, 2026-10-23
 
 ### Measured
