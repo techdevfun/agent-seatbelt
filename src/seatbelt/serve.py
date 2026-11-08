@@ -93,6 +93,18 @@ class Daemon:
     # ------------------------------------------------------------- PDP
     def decide(self, action: dict, action_id: str | None,
                subject: dict) -> dict:
+        # File scope is decided on a lexically normalised path: without
+        # this, ".." segments smuggle a sibling path past the policy's
+        # boundary check ("/tmp/ws/../ws-evil/x.txt" starts with
+        # "/tmp/ws/"). The ledger subject keeps the raw path as
+        # submitted, so the record still shows what was attempted.
+        if action.get("class") == "file":
+            action = dict(action)
+            if action.get("path"):
+                action["path"] = os.path.normpath(action["path"])
+            if action.get("workspace"):
+                action["workspace"] = os.path.normpath(
+                    action["workspace"])
         started = time.perf_counter()
         result = self.pdp.decide(action)
         kind = KIND_BY_CLASS[action["class"]]
