@@ -95,13 +95,33 @@ decision := {"decision": "deny", "reason": "file_path_denied"} if {
 decision := {"decision": "allow", "reason": "file_within_scope"} if {
 	input.class == "file"
 	not file_path_denied
-	startswith(input.path, input.workspace)
+	file_in_workspace
 }
 
 decision := {"decision": "deny", "reason": "file_outside_scope"} if {
 	input.class == "file"
 	not file_path_denied
-	not startswith(input.path, input.workspace)
+	not file_in_workspace
+}
+
+# A path is inside the workspace only when it IS the workspace or a
+# real child of it. A bare startswith(input.path, input.workspace)
+# check also matches sibling directories that merely share a prefix
+# ("/tmp/ws-evil" starts with "/tmp/ws"), which would let an agent
+# write outside the run workspace while the record claims
+# "file_within_scope". The separator boundary below closes that.
+file_in_workspace if {
+	input.workspace == "/"
+	startswith(input.path, "/")
+}
+
+file_in_workspace if {
+	input.path == input.workspace
+}
+
+file_in_workspace if {
+	input.workspace != "/"
+	startswith(input.path, concat("/", [input.workspace, ""]))
 }
 
 file_path_denied if {
