@@ -20,7 +20,7 @@ from seatbelt.hook import map_event  # noqa: E402
 from seatbelt.ingest import normalize_ocsf, normalize_otel  # noqa: E402
 from seatbelt.ledger import (Ledger, load_signing_key, merkle_root,  # noqa: E402
                              read_records)
-from seatbelt.serve import dns_subject, start_opa  # noqa: E402
+from seatbelt.serve import Daemon, dns_subject, start_opa  # noqa: E402
 from seatbelt.pdp import PDP  # noqa: E402
 from seatbelt.verify import verify_bundle  # noqa: E402
 
@@ -227,6 +227,60 @@ class PDPTests(unittest.TestCase):
                            "raw_read": True})
         self.assertEqual(out["reason"],
                          "credential_raw_disclosure_forbidden")
+
+    def test_file_scope_allows_child_and_workspace_itself(self):
+        base = {"class": "file", "op": "write", "workspace": "/tmp/ws"}
+        self.assertEqual(self.decide(
+            {**base, "path": "/tmp/ws/notes.txt"})["decision"], "allow")
+        self.assertEqual(self.decide(
+            {**base, "path": "/tmp/ws"})["decision"], "allow")
+        self.assertEqual(self.decide(
+            {**base, "path": "/tmp/ws/sub/deep.txt"})["decision"], "allow")
+
+    def test_file_scope_denies_sibling_sharing_a_prefix(self):
+        # Regression: a bare startswith() prefix check allowed
+        # "/tmp/ws-evil" as "within" workspace "/tmp/ws".
+        base = {"class": "file", "op": "write", "workspace": "/tmp/ws"}
+        for path in ("/tmp/ws-evil/notes.txt", "/tmp/ws2/secret.txt",
+                     "/tmp/ws-backup/x.txt"):
+            out = self.decide({**base, "path": path})
+            self.assertEqual(out["decision"], "deny", path)
+            self.assertEqual(out["reason"], "file_outside_scope", path)
+
+    def test_file_scope_dotdot_escape_denied_end_to_end(self):
+        # ".." is collapsed by Daemon.decide before the PDP sees the
+        # path, so an escape to a sibling is denied; a ".." that stays
+        # inside still resolves to a real child and is allowed.
+        with tempfile.TemporaryDirectory() as tmp:
+            cfg = {
+                "opa_url": self.pdp.opa_url,
+                "policies_dir": os.path.join(ROOT, "policies"),
+                "key_file": os.path.join(tmp, "key.txt"),
+                "ledger_path": os.path.join(tmp, "run", "ledger.ndjson"),
+                "anchor_path": os.path.join(tmp, "anchors",
+                                            "anchors.ndjson"),
+                "run_id": "run-file-scope", "agent": "ops-assistant",
+                "adapter": "test", "workspace": "/tmp/ws",
+            }
+            daemon = Daemon(cfg)
+            try:
+                out = daemon.decide(
+                    {"class": "file", "op": "write",
+                     "path": "/tmp/ws/../ws-evil/x.txt",
+                     "workspace": "/tmp/ws"},
+                    "a-dotdot", {"tool": "file.write",
+                                 "path": "/tmp/ws/../ws-evil/x.txt"})
+                self.assertEqual(out["decision"], "deny")
+                self.assertEqual(out["reason"], "file_outside_scope")
+                out = daemon.decide(
+                    {"class": "file", "op": "write",
+                     "path": "/tmp/ws/sub/../notes.txt",
+                     "workspace": "/tmp/ws"},
+                    "a-dotdot-ok", {"tool": "file.write",
+                                    "path": "/tmp/ws/sub/../notes.txt"})
+                self.assertEqual(out["decision"], "allow")
+            finally:
+                daemon.ledger.close()
 
     def test_unknown_class_defaults_to_deny(self):
         out = self.decide({"class": "teleport"})
