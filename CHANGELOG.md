@@ -2,6 +2,11 @@
 
 All notable changes to Agent Seatbelt are recorded here. The policy pack is versioned separately (see `POLICY_PACK_VERSION` in `src/seatbelt/__init__.py`); pack changes are called out explicitly.
 
+## [Unreleased] — 2026-11-08
+
+### Fixed
+- File-scope bypass (security): the policy pack's workspace check was a bare `startswith(path, workspace)`, so sibling directories sharing a prefix (`/tmp/ws-evil`, `/tmp/ws2` next to workspace `/tmp/ws`) were decided `allow / file_within_scope`, contradicting the documented "paths under the run workspace" scope. The pack now requires the workspace itself or a real child (`workspace + "/"` boundary). The daemon also lexically normalises file paths before the PDP call, so a `..` escape (`/tmp/ws/../ws-evil/x.txt`) is denied as well; the ledger still records the raw path as submitted. Regression tests added (3 new PDP tests; suite now 26 tests).
+
 ## [Unreleased] — 2026-11-01
 
 ### Changed
