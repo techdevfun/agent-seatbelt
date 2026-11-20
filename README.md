@@ -25,7 +25,7 @@ Seatbelt is the missing layer: one policy point and one evidence ledger across r
 
 ## Quickstart (the golden path, ~2 minutes)
 
-Prerequisites: Python ≥ 3.11 and an [OPA](https://www.openpolicyagent.org/) binary (phase 1 is developed against OPA 1.21). Everything else is the Python standard library.
+Prerequisites: Python ≥ 3.11 and an [OPA](https://www.openpolicyagent.org/) binary (phase 1 is developed against OPA 1.22). Everything else is the Python standard library.
 
 ```bash
 export PYTHONPATH="$PWD/src"
