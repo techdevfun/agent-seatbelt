@@ -46,9 +46,9 @@
       "executable_lines": 42
     },
     "serve.py": {
-      "coverage_pct": 14.7,
-      "covered_lines": 64,
-      "executable_lines": 434
+      "coverage_pct": 23.6,
+      "covered_lines": 104,
+      "executable_lines": 441
     },
     "verify.py": {
       "coverage_pct": 77.9,
@@ -58,11 +58,11 @@
   },
   "scope": "src/seatbelt/*.py",
   "tests_passed": true,
-  "tests_run": 23,
+  "tests_run": 26,
   "tool": "scripts/run_tests_with_coverage.py (stdlib sys.monitoring)",
   "total": {
-    "coverage_pct": 37.2,
-    "covered_lines": 430,
-    "executable_lines": 1155
+    "coverage_pct": 40.4,
+    "covered_lines": 470,
+    "executable_lines": 1162
   }
 }
