@@ -32,8 +32,8 @@ jobs:
         run: |
           mkdir -p "$RUNNER_TEMP/oslive/stage"
           echo "OSLIVE=$RUNNER_TEMP/oslive" >> "$GITHUB_ENV"
-          curl -sL --fail -o /tmp/opa https://openpolicyagent.org/downloads/v1.21.4/opa_linux_amd64_static
-          echo "2ab571f367f293bb19523b76f92f1945bbf245003392c7f392903f95c2b9b630  /tmp/opa" | sha256sum -c -
+          curl -sL --fail -o /tmp/opa https://openpolicyagent.org/downloads/v1.22.4/opa_linux_amd64_static
+          echo "35e3b352e715e80624ead6c89930d8585f6f7d94cdc409eb2a9fe36620dcccba  /tmp/opa" | sha256sum -c -
           chmod +x /tmp/opa
           /tmp/opa version
 
