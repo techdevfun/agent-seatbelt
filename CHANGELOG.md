@@ -2,6 +2,12 @@
 
 All notable changes to Agent Seatbelt are recorded here. The policy pack is versioned separately (see `POLICY_PACK_VERSION` in `src/seatbelt/__init__.py`); pack changes are called out explicitly.
 
+## [Unreleased] — 2026-11-20
+
+### Changed
+- CI + live OpenShell workflow: bump the pinned, sha256-verified OPA binary v1.21.4 → v1.22.4 (a security fix release for CVE-2026-97054, a Go HTTP/1 server crash; the 1.22 line also moved the default Rego syntax to v1). Unit suite (26 tests) and the full acceptance harness re-run locally against 1.22.4 — all acceptance checks pass, probe median p95 42.376 ms against the 50 ms budget.
+- Published line coverage 37.2% → 40.4%: the unit suite grew 23 → 26 tests with the 08/11 file-scope regression tests, and the coverage file had not been re-published since; this bump's re-run regenerated it.
+
 ## [Unreleased] — 2026-11-08
 
 ### Fixed
